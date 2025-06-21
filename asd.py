@@ -44,7 +44,7 @@ def save_shared_data(records):
 if 'records' not in st.session_state:
     st.session_state['records'] = load_shared_data()
 
-INT = 0.780207872582
+INT = 5.98020787258
 # Initialize timer state
 if 'timer_start' not in st.session_state:
     st.session_state['timer_start'] = None
