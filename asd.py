@@ -3,9 +3,11 @@ import pandas as pd
 import numpy as np
 import logging
 import time
+import os
 from datetime import datetime
 
 MAX_BONUS_RATIO = 0.2
+SHARED_DATA_FILE = 'shared_team_data.csv'
 
 # Configure logging
 logging.basicConfig(
@@ -17,9 +19,30 @@ logging.basicConfig(
     ]
 )
 
-# Initialize session state for storing team records
+# Function to load shared data
+def load_shared_data():
+    if os.path.exists(SHARED_DATA_FILE):
+        try:
+            return pd.read_csv(SHARED_DATA_FILE).to_dict('records')
+        except Exception as e:
+            logging.error(f"Error loading shared data: {e}")
+            return []
+    return []
+
+# Function to save shared data
+def save_shared_data(records):
+    try:
+        df = pd.DataFrame(records)
+        df.to_csv(SHARED_DATA_FILE, index=False)
+        logging.info(f"Saved {len(records)} records to shared file")
+        return True
+    except Exception as e:
+        logging.error(f"Error saving shared data: {e}")
+        return False
+
+# Load shared records at startup
 if 'records' not in st.session_state:
-    st.session_state['records'] = []
+    st.session_state['records'] = load_shared_data()
 
 INT = 0.780207872582
 # Initialize timer state
@@ -108,6 +131,7 @@ if save_solution_button:
             st.stop()
 
         error = abs(estimate - INT)
+        
         record = {
             'team': name,
             'time': time,
@@ -116,14 +140,18 @@ if save_solution_button:
             'error_estimate': error_estimate,
             'timestamp': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         }
-        st.session_state.records.append(record)
-          # Save dataframe after each submission
-        saved_file = save_dataframe()
-        if saved_file:
+        
+        # Load current shared data to avoid conflicts
+        current_records = load_shared_data()
+        current_records.append(record)
+        
+        # Save to shared file
+        if save_shared_data(current_records):
+            st.session_state.records = current_records  # Update session state
             logging.info(f"New team added: {name}, Time: {time}s, Estimate: {estimate}, Error: {error:.4f}")
-            st.success(f"Tým '{name}' přidán a data uložena do {saved_file} (čas: {time:.1f}s)")
+            st.success(f"Tým '{name}' přidán a data uložena (čas: {time:.1f}s)")
         else:
-            st.success(f"Tým '{name}' přidán (čas: {time:.1f}s).")
+            st.error("Chyba při ukládání dat!")
         
         # Set submission time for delayed clearing
         st.session_state['submission_time'] = datetime.now()
@@ -143,6 +171,9 @@ st.subheader("Sekce pro organizátory")
 password = st.text_input("Heslo pro organizátory", type="password")
 
 if password == "qwazsazsus":
+    # Refresh data from shared file in organizer section
+    st.session_state['records'] = load_shared_data()
+    
     if st.session_state.records:
         df = pd.DataFrame(st.session_state.records)
         st.subheader("Zadaná data")
