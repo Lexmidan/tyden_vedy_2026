@@ -162,25 +162,27 @@ if active_sessions:
 
 # Form for submission
 st.markdown("---")
+st.subheader("Odevzdat řešení")
+st.write("**Krok 2:** Zadejte název týmu a své řešení")
+
+# Team name input outside the form for dynamic validation
+name = st.text_input("Název týmu", key="team_submit")
+
+# Check if team has active session
+team_session = None
+session_valid = False
+if name:
+    team_session = get_team_session(name)
+    if team_session:
+        session_valid = True
+        start_time = datetime.strptime(team_session['start_time'], "%Y-%m-%d %H:%M:%S")
+        elapsed = (datetime.now() - start_time).total_seconds()
+        st.success(f"✅ Nalezena aktivní session (běží {elapsed/60:.1f} minut)")
+    else:
+        st.warning("⚠️ Pro tento tým nebyla nalezena aktivní session!")
+
+# Form with the rest of the fields
 with st.form("team_input_form"):
-    st.subheader("Odevzdat řešení")
-    st.write("**Krok 2:** Zadejte název týmu a své řešení")
-    
-    name = st.text_input("Název týmu", key="team_submit")
-    
-    # Check if team has active session
-    team_session = None
-    session_valid = False
-    if name:
-        team_session = get_team_session(name)
-        if team_session:
-            session_valid = True
-            start_time = datetime.strptime(team_session['start_time'], "%Y-%m-%d %H:%M:%S")
-            elapsed = (datetime.now() - start_time).total_seconds()
-            st.success(f"✅ Nalezena aktivní session (běží {elapsed/60:.1f} minut)")
-        else:
-            st.warning("⚠️ Pro tento tým nebyla nalezena aktivní session!")
-    
     estimate = st.number_input("Odhad integrálu", format="%.4f", disabled=not session_valid)
     error_estimate = st.number_input("Odhad chyby (volitelné - pro bonus)", min_value=0.0, value=0.0, format="%.4f", disabled=not session_valid)
     
