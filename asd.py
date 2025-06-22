@@ -80,8 +80,8 @@ def start_team_session(team_name):
     sessions.append(new_session)
     if save_team_sessions(sessions):
         logging.info(f"Started session for team: {team_name}")
-        return True, "Session zahájena!"
-    return False, "Chyba při ukládání session!"
+        return True, "Úloha zahájena!"
+    return False, "Chyba při ukládání výsledku!"
 
 # Function to get team session
 def get_team_session(team_name):
@@ -133,7 +133,6 @@ st.write(
     "Skóre je založeno na hodnotě chyby a času. "
     "Bonus za odhad chyby může přidat až 20% k celkovému skóre."
 )
-st.latex(r"z = \frac{|I - \hat{I}|}{\text{error\_estimate}} \sim N(0, 1)")
 
 # Timer controls
 st.subheader("Začít úlohu")
@@ -155,7 +154,7 @@ if start_button and team_name_start:
 sessions = load_team_sessions()
 active_sessions = [s for s in sessions if not s.get('completed', False)]
 if active_sessions:
-    st.subheader("Aktivní sessions")
+    st.subheader("Active sessions")
     for session in active_sessions:
         start_time = datetime.strptime(session['start_time'], "%Y-%m-%d %H:%M:%S")
         elapsed = (datetime.now() - start_time).total_seconds()
@@ -171,19 +170,21 @@ with st.form("team_input_form"):
     
     # Check if team has active session
     team_session = None
+    session_valid = False
     if name:
         team_session = get_team_session(name)
         if team_session:
+            session_valid = True
             start_time = datetime.strptime(team_session['start_time'], "%Y-%m-%d %H:%M:%S")
             elapsed = (datetime.now() - start_time).total_seconds()
             st.success(f"✅ Nalezena aktivní session (běží {elapsed/60:.1f} minut)")
         else:
             st.warning("⚠️ Pro tento tým nebyla nalezena aktivní session!")
     
-    estimate = st.number_input("Odhad integrálu", format="%.4f", disabled=not team_session)
-    error_estimate = st.number_input("Odhad chyby (volitelné - pro bonus)", min_value=0.0, value=0.0, format="%.4f", disabled=not team_session)
+    estimate = st.number_input("Odhad integrálu", format="%.4f", disabled=not session_valid)
+    error_estimate = st.number_input("Odhad chyby (volitelné - pro bonus)", min_value=0.0, value=0.0, format="%.4f", disabled=not session_valid)
     
-    save_solution_button = st.form_submit_button("Odevzdat řešení", disabled=not team_session)
+    save_solution_button = st.form_submit_button("Odevzdat řešení", disabled=not session_valid)
 
 if save_solution_button:
     if not name:
@@ -277,4 +278,4 @@ elif password:
     st.error("Nesprávné heslo!")
 
 st.markdown("---")
-st.caption("Aplikace vytvořena pro fyziko-matematickou soutěž integrační metodou se sýrem.")
+st.caption("Aplikace vytvořena pro Týden Vědy na Jaderce 2025")
