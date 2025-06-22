@@ -8,6 +8,7 @@ from datetime import datetime
 
 MAX_BONUS_RATIO = 0.2
 SHARED_DATA_FILE = 'shared_team_data.csv'
+TEAM_SESSIONS_FILE = 'team_sessions.csv'
 
 # Configure logging
 logging.basicConfig(
@@ -40,6 +41,64 @@ def save_shared_data(records):
         logging.error(f"Error saving shared data: {e}")
         return False
 
+# Function to load team sessions
+def load_team_sessions():
+    if os.path.exists(TEAM_SESSIONS_FILE):
+        try:
+            return pd.read_csv(TEAM_SESSIONS_FILE).to_dict('records')
+        except Exception as e:
+            logging.error(f"Error loading team sessions: {e}")
+            return []
+    return []
+
+# Function to save team sessions
+def save_team_sessions(sessions):
+    try:
+        df = pd.DataFrame(sessions)
+        df.to_csv(TEAM_SESSIONS_FILE, index=False)
+        logging.info(f"Saved {len(sessions)} team sessions")
+        return True
+    except Exception as e:
+        logging.error(f"Error saving team sessions: {e}")
+        return False
+
+# Function to start team session
+def start_team_session(team_name):
+    sessions = load_team_sessions()
+    
+    # Check if team already has an active session
+    existing_session = next((s for s in sessions if s['team'] == team_name and s.get('completed', False) == False), None)
+    if existing_session:
+        return False, "Tým už má aktivní session!"
+    
+    new_session = {
+        'team': team_name,
+        'start_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        'completed': False
+    }
+    
+    sessions.append(new_session)
+    if save_team_sessions(sessions):
+        logging.info(f"Started session for team: {team_name}")
+        return True, "Session zahájena!"
+    return False, "Chyba při ukládání session!"
+
+# Function to get team session
+def get_team_session(team_name):
+    sessions = load_team_sessions()
+    return next((s for s in sessions if s['team'] == team_name and s.get('completed', False) == False), None)
+
+# Function to complete team session
+def complete_team_session(team_name):
+    sessions = load_team_sessions()
+    for session in sessions:
+        if session['team'] == team_name and session.get('completed', False) == False:
+            session['completed'] = True
+            session['end_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            save_team_sessions(sessions)
+            return True
+    return False
+
 # Load shared records at startup
 if 'records' not in st.session_state:
     st.session_state['records'] = load_shared_data()
@@ -68,73 +127,79 @@ def save_dataframe():
         return filename
     return None
 
-st.title("Integrování sýrovou metodou.")
+st.title("Integrace per Eidam")
 st.write(
-    "Aplikace pro zadávání výsledků týmů v úloze integrace pomocí sýra. "
-    "Skóre je založeno na normě vektoru (E, T), kde E a T jsou normalizované hodnoty chyby a času. "
-    "Bonus za odhad chyby je založen na z-statistice:"
+    "Sem zadáte výsledky. "
+    "Skóre je založeno na hodnotě chyby a času. "
+    "Bonus za odhad chyby může přidat až 20% k celkovému skóre."
 )
 st.latex(r"z = \frac{|I - \hat{I}|}{\text{error\_estimate}} \sim N(0, 1)")
 
 # Timer controls
 st.subheader("Začít úlohu")
-col1, col2 = st.columns(2)
 
-with col1:
-    if st.button("Spustit stopky"):
-        st.session_state['timer_start'] = datetime.now()
-        st.session_state['timer_running'] = True
+# Form for starting timer
+with st.form("start_timer_form"):
+    st.write("**Krok 1:** Zadejte název týmu a spusťte stopky")
+    team_name_start = st.text_input("Název týmu", key="team_start")
+    start_button = st.form_submit_button("Spustit stopky")
 
-with col2:
-    if st.session_state['timer_running']:
-        elapsed = (datetime.now() - st.session_state['timer_start']).total_seconds()
-        st.metric("Uplynulý čas", f"{elapsed:.1f} s")
+if start_button and team_name_start:
+    success, message = start_team_session(team_name_start)
+    if success:
+        st.success(f"✅ {message}")
     else:
-        st.metric("Tady se zobrazí uplynulý čas", "0.0 s")
+        st.error(f"❌ {message}")
 
-# Display current timer status
-if st.session_state['timer_running']:
-    st.info("⏱️ Stopky běží...")
-elif st.session_state['timer_start']:
-    final_time = (datetime.now() - st.session_state['timer_start']).total_seconds()
-    st.success(f"✅ Poslední měření: {final_time:.1f} s")
+# Show active sessions
+sessions = load_team_sessions()
+active_sessions = [s for s in sessions if not s.get('completed', False)]
+if active_sessions:
+    st.subheader("Aktivní sessions")
+    for session in active_sessions:
+        start_time = datetime.strptime(session['start_time'], "%Y-%m-%d %H:%M:%S")
+        elapsed = (datetime.now() - start_time).total_seconds()
+        st.info(f"🏃 **{session['team']}** - běží {elapsed/60:.1f} minut")
 
-# Form pro zadání výsledků jednoho týmu
+# Form for submission
+st.markdown("---")
 with st.form("team_input_form"):
-    st.subheader("Přidat výsledky týmu")
+    st.subheader("Odevzdat řešení")
+    st.write("**Krok 2:** Zadejte název týmu a své řešení")
     
-    # Check if timer has been started
-    timer_started = st.session_state['timer_start'] is not None
+    name = st.text_input("Název týmu", key="team_submit")
     
-    if not timer_started:
-        st.warning("⚠️ Nejdříve spusťte stopky před zadáváním výsledků!")
+    # Check if team has active session
+    team_session = None
+    if name:
+        team_session = get_team_session(name)
+        if team_session:
+            start_time = datetime.strptime(team_session['start_time'], "%Y-%m-%d %H:%M:%S")
+            elapsed = (datetime.now() - start_time).total_seconds()
+            st.success(f"✅ Nalezena aktivní session (běží {elapsed/60:.1f} minut)")
+        else:
+            st.warning("⚠️ Pro tento tým nebyla nalezena aktivní session!")
     
-    name = st.text_input("Název týmu", disabled=not timer_started)
+    estimate = st.number_input("Odhad integrálu", format="%.4f", disabled=not team_session)
+    error_estimate = st.number_input("Odhad chyby (volitelné - pro bonus)", min_value=0.0, value=0.0, format="%.4f", disabled=not team_session)
     
-    estimate = st.number_input("Odhad integrálu", format="%.4f", disabled=not timer_started)
-    error_estimate = st.number_input("Odhad chyby (volitelné - pro bonus)", min_value=0.0, value=0.0, format="%.4f", disabled=not timer_started)
-    
-    save_solution_button = st.form_submit_button("Uložit řešení", disabled=not timer_started)
-    
+    save_solution_button = st.form_submit_button("Odevzdat řešení", disabled=not team_session)
+
 if save_solution_button:
     if not name:
         st.error("Zadejte název týmu.")
+    elif not team_session:
+        st.error("Pro tento tým nebyla nalezena aktivní session!")
     else:
-        # Stop timer if it's running and get the time
-        if st.session_state['timer_running']:
-            st.session_state['timer_running'] = False
-            time = (datetime.now() - st.session_state['timer_start']).total_seconds()
-        elif st.session_state['timer_start']:
-            time = (datetime.now() - st.session_state['timer_start']).total_seconds()
-        else:
-            st.error("Spusťte prosím nejdřív stopky.")
-            st.stop()
-
+        # Calculate time from stored session
+        start_time = datetime.strptime(team_session['start_time'], "%Y-%m-%d %H:%M:%S")
+        time_elapsed = (datetime.now() - start_time).total_seconds()
+        
         error = abs(estimate - INT)
         
         record = {
             'team': name,
-            'time': time,
+            'time': time_elapsed,
             'estimate': estimate,
             'error': error,
             'error_estimate': error_estimate,
@@ -145,25 +210,13 @@ if save_solution_button:
         current_records = load_shared_data()
         current_records.append(record)
         
-        # Save to shared file
-        if save_shared_data(current_records):
+        # Save to shared file and complete session
+        if save_shared_data(current_records) and complete_team_session(name):
             st.session_state.records = current_records  # Update session state
-            logging.info(f"New team added: {name}, Time: {time}s, Estimate: {estimate}, Error: {error:.4f}")
-            st.success(f"Tým '{name}' přidán a data uložena (čas: {time:.1f}s)")
+            logging.info(f"New team submitted: {name}, Time: {time_elapsed}s, Estimate: {estimate}, Error: {error:.4f}")
+            st.success(f"✅ Tým '{name}' úspěšně odevzdal řešení (čas: {time_elapsed/60:.1f} minut)")
         else:
-            st.error("Chyba při ukládání dat!")
-        
-        # Set submission time for delayed clearing
-        st.session_state['submission_time'] = datetime.now()
-        
-        # Reset timer for next team
-        st.session_state['timer_start'] = None
-
-# Check if 20 seconds have passed since submission to clear the form
-if (st.session_state['submission_time'] and 
-    (datetime.now() - st.session_state['submission_time']).total_seconds() >= 20):
-    st.session_state['submission_time'] = None
-    st.rerun()
+            st.error("❌ Chyba při ukládání dat!")
 
 # Organizer section - password protected
 st.markdown("---")
